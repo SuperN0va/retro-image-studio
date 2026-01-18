@@ -1,0 +1,23 @@
+{
+	"name": "RetroFX Dev",
+	"image": "mcr.microsoft.com/devcontainers/javascript-node:18",
+	"customizations": {
+		"vscode": {
+			"settings": {
+				"editor.formatOnSave": true
+			},
+			"extensions": [
+				"ritwickdey.LiveServer",
+				"esbenp.prettier-vscode"
+			]
+		}
+	},
+	"forwardPorts": [5500],
+	"portsAttributes": {
+		"5500": {
+			"label": "Application",
+			"onAutoForward": "notify"
+		}
+	},
+	"postCreateCommand": "echo 'RetroFX environment ready! Click Go Live to start.'"
+}
