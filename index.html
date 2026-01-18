@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetroFX - 创意图片处理器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+
+        .retro-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        .canvas-container {
+            background-image: 
+                linear-gradient(45deg, #1f1f1f 25%, transparent 25%), 
+                linear-gradient(-45deg, #1f1f1f 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #1f1f1f 75%), 
+                linear-gradient(-45deg, transparent 75%, #1f1f1f 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -6px; 
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #4b5563;
+            border-radius: 2px;
+        }
+        
+        .filter-btn.active {
+            border-color: #3b82f6;
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+        }
+
+        /* 比较按钮动画 */
+        .compare-active {
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.5);
+            transform: scale(0.98);
+        }
+        
+        /* 动态光标样式 */
+        .cursor-nwse { cursor: nwse-resize !important; }
+        .cursor-nesw { cursor: nesw-resize !important; }
+        .cursor-ns { cursor: ns-resize !important; }
+        .cursor-ew { cursor: ew-resize !important; }
+        .cursor-move { cursor: move !important; }
+        .cursor-default { cursor: default !important; }
+
+        /* Slider Handle 样式 */
+        #sliderHandle::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 2px;
+            background: white;
+            transform: translateX(-50%);
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- 顶部导航 -->
+    <header class="h-16 border-b border-gray-800 bg-gray-900 flex items-center justify-between px-6 shadow-lg z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <i class="fas fa-layer-group text-blue-500 text-2xl"></i>
+            <h1 class="text-xl font-bold tracking-wider">RetroFX <span class="text-xs text-gray-500 font-normal ml-2">Web Image Studio</span></h1>
+        </div>
+        <div class="flex gap-4 items-center">
+            <button id="reselectBtn" class="hidden px-4 py-2 text-sm bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 rounded-lg transition-colors border border-gray-700">
+                <i class="fas fa-folder-open mr-2"></i>换图
+            </button>
+            <div class="h-6 w-px bg-gray-700 hidden" id="divider"></div>
+            <button id="resetBtn" class="hidden px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
+                <i class="fas fa-undo mr-2"></i>重置
+            </button>
+            <button id="downloadBtn" class="hidden bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-full font-medium transition-all shadow-lg flex items-center gap-2">
+                <i class="fas fa-download"></i> 导出
+            </button>
+        </div>
+    </header>
+
+    <!-- 主体区域 -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- 左侧：图片预览区 -->
+        <div class="flex-1 relative bg-gray-900 flex flex-col items-center justify-center p-6 canvas-container overflow-hidden" id="dropZone">
+            
+            <!-- 上传提示 UI -->
+            <div id="uploadUi" class="text-center p-10 border-2 border-dashed border-gray-700 rounded-xl hover:border-blue-500 hover:bg-gray-800/50 transition-all cursor-pointer group">
+                <div class="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                    <i class="fas fa-cloud-upload-alt text-3xl text-blue-400"></i>
+                </div>
+                <h3 class="text-xl font-semibold mb-2 text-white">点击或拖拽图片到这里</h3>
+                <p class="text-gray-400 text-sm mb-4">支持 JPG, PNG, WEBP (最大 20MB)</p>
+                <input type="file" id="fileInput" accept="image/*" class="hidden">
+            </div>
+
+            <!-- Canvas Wrapper: 用于包裹 Canvas 和 Overlay，保持相对定位 -->
+            <div id="canvasWrapper" class="relative hidden shadow-2xl border border-gray-800" style="font-size: 0;"> <!-- font-size:0 消除 inline-block 间隙 -->
+                <!-- 主 Canvas (显示效果图 / After) -->
+                <canvas id="mainCanvas" class="max-w-full max-h-full block"></canvas>
+
+                <!-- 对比层 Overlay (显示原图 / Before) -->
+                <div id="compareOverlay" class="absolute top-0 left-0 h-full overflow-hidden select-none hidden" style="width: 50%; z-index: 10;">
+                    <!-- beforeCanvas 的尺寸必须通过 JS 动态同步，以保持和 mainCanvas 像素级对齐 -->
+                    <canvas id="beforeCanvas" class="absolute top-0 left-0 h-full w-auto max-w-none"></canvas>
+                    
+                    <!-- 标签: Before -->
+                    <div class="absolute bottom-4 left-4 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur pointer-events-none">
+                        原图
+                    </div>
+                </div>
+                
+                <!-- 标签: After (显示在底层) -->
+                <div id="afterLabel" class="absolute bottom-4 right-4 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur pointer-events-none hidden z-0">
+                    效果
+                </div>
+
+                <!-- 滑块 Handle -->
+                <div id="sliderHandle" class="absolute top-0 bottom-0 w-8 -ml-4 cursor-ew-resize hidden z-20" style="left: 50%;">
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg text-gray-800 border-2 border-gray-200">
+                        <i class="fas fa-arrows-alt-h text-xs"></i>
+                    </div>
+                </div>
+
+                <!-- 裁剪提示 (覆盖在最上层) -->
+                <div id="cropHint" class="hidden absolute top-4 left-1/2 -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-full text-sm backdrop-blur pointer-events-none select-none z-30 whitespace-nowrap">
+                    拖动选区边缘调整大小，拖动中间移动位置
+                </div>
+            </div>
+            
+            <!-- 底部工具栏：对比模式切换 -->
+            <div id="compareTools" class="absolute bottom-6 flex gap-2 z-20 hidden">
+                 <button id="compareBtn" class="bg-gray-900/80 hover:bg-blue-600/90 backdrop-blur text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg transition-all select-none border border-white/10 active:scale-95">
+                    <i class="fas fa-eye mr-2"></i>按住对比
+                </button>
+                <button id="toggleSliderBtn" class="bg-gray-900/80 hover:bg-blue-600/90 backdrop-blur text-gray-300 hover:text-white px-4 py-2 rounded-full text-sm font-medium shadow-lg transition-all select-none border border-white/10 active:scale-95">
+                    <i class="fas fa-columns mr-2"></i>滑动对比
+                </button>
+            </div>
+            
+            <!-- Loading Indicator -->
+            <div id="loading" class="hidden absolute inset-0 bg-black/70 flex items-center justify-center z-20">
+                <div class="flex flex-col items-center">
+                    <i class="fas fa-spinner fa-spin text-4xl text-blue-500 mb-3"></i>
+                    <p class="text-white font-medium">正在处理...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：工具栏 -->
+        <aside class="w-80 bg-gray-900 border-l border-gray-800 flex flex-col z-10 shadow-2xl transform transition-transform duration-300 translate-x-full md:translate-x-0 absolute md:relative right-0 h-full shrink-0" id="sidebar">
+            <div class="p-5 border-b border-gray-800">
+                <h2 class="font-semibold text-gray-300 flex items-center gap-2">
+                    <i class="fas fa-sliders-h"></i> 调节面板
+                </h2>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-5 space-y-8">
+                
+                <!-- 图片基础调整区 -->
+                <div id="adjustmentSection" class="hidden">
+                     <label class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">基础工具</label>
+                     <div class="grid grid-cols-2 gap-2">
+                         <button id="rotateBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-lg border border-gray-700 transition-colors text-sm flex items-center justify-center gap-2">
+                             <i class="fas fa-redo"></i> 旋转 90°
+                         </button>
+                         <button id="cropStartBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 py-3 rounded-lg border border-gray-700 transition-colors text-sm flex items-center justify-center gap-2">
+                             <i class="fas fa-crop-alt"></i> 裁剪
+                         </button>
+                     </div>
+                </div>
+                
+                <!-- 裁剪/选区模式控制区 (默认隐藏) -->
+                <div id="cropControlSection" class="hidden bg-gray-800/50 p-4 rounded-xl border border-blue-500/30">
+                    <label id="selectionModeLabel" class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-3 block text-center">正在裁剪模式</label>
+                    <div class="flex gap-2">
+                        <button id="cropCancelBtn" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 rounded-lg text-sm transition-colors">
+                            取消
+                        </button>
+                        <button id="cropConfirmBtn" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-lg text-sm font-bold transition-colors shadow-lg shadow-blue-900/20">
+                            确认
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 滤镜选择区 -->
+                <div id="filterSection">
+                    <label class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">选择风格</label>
+                    <div class="grid grid-cols-2 gap-3" id="filterContainer">
+                        <!-- 按钮由 JS 生成 -->
+                    </div>
+                </div>
+
+                <!-- 马赛克专属控制区 -->
+                <div id="mosaicToolSection" class="hidden mt-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-bold text-gray-400 uppercase">局部效果</label>
+                        <span id="regionStatus" class="text-xs text-blue-400 hidden">已选定区域</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="selectMosaicRegionBtn" class="flex-1 bg-gray-700 hover:bg-gray-600 text-gray-200 py-2 rounded text-xs flex items-center justify-center gap-1">
+                            <i class="fas fa-vector-square"></i> 选择打码区域
+                        </button>
+                        <button id="clearMosaicRegionBtn" class="px-3 bg-gray-700 hover:bg-red-900/50 hover:text-red-400 text-gray-400 py-2 rounded text-xs hidden">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 参数调节 -->
+                <div id="controlsContainer" class="opacity-50 pointer-events-none transition-opacity">
+                    <div class="mb-6">
+                        <div class="flex justify-between mb-2">
+                            <label id="slider1Label" class="text-sm text-gray-300">强度 / 大小</label>
+                            <span id="slider1Value" class="text-sm text-blue-400">0</span>
+                        </div>
+                        <input type="range" id="slider1" min="0" max="100" value="0" class="w-full">
+                    </div>
+
+                    <div id="slider2Group" class="mb-6 hidden">
+                        <div class="flex justify-between mb-2">
+                            <label id="slider2Label" class="text-sm text-gray-300">细节 / 清晰度</label>
+                            <span id="slider2Value" class="text-sm text-blue-400">0</span>
+                        </div>
+                        <input type="range" id="slider2" min="0" max="100" value="0" class="w-full">
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-800 text-center text-xs text-gray-600">
+                Processed locally via HTML5 Canvas
+            </div>
+        </aside>
+    </main>
+
+<script>
+    // --- DOM 元素 ---
+    const dropZone = document.getElementById('dropZone');
+    const uploadUi = document.getElementById('uploadUi');
+    const fileInput = document.getElementById('fileInput');
+    
+    // Canvas & Wrapper
+    const canvasWrapper = document.getElementById('canvasWrapper');
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // Comparison Overlay
+    const compareOverlay = document.getElementById('compareOverlay');
+    const beforeCanvas = document.getElementById('beforeCanvas');
+    const beforeCtx = beforeCanvas.getContext('2d');
+    const sliderHandle = document.getElementById('sliderHandle');
+    const afterLabel = document.getElementById('afterLabel');
+    const toggleSliderBtn = document.getElementById('toggleSliderBtn');
+    
+    // UI 区域
+    const filterContainer = document.getElementById('filterContainer');
+    const controlsContainer = document.getElementById('controlsContainer');
+    const adjustmentSection = document.getElementById('adjustmentSection');
+    const filterSection = document.getElementById('filterSection');
+    const compareTools = document.getElementById('compareTools');
+    
+    const cropControlSection = document.getElementById('cropControlSection');
+    const selectionModeLabel = document.getElementById('selectionModeLabel');
+    const cropHint = document.getElementById('cropHint');
+    
+    // 马赛克专属
+    const mosaicToolSection = document.getElementById('mosaicToolSection');
+    const selectMosaicRegionBtn = document.getElementById('selectMosaicRegionBtn');
+    const clearMosaicRegionBtn = document.getElementById('clearMosaicRegionBtn');
+    const regionStatus = document.getElementById('regionStatus');
+    
+    // 按钮
+    const downloadBtn = document.getElementById('downloadBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const reselectBtn = document.getElementById('reselectBtn');
+    const divider = document.getElementById('divider');
+    const compareBtn = document.getElementById('compareBtn');
+    const rotateBtn = document.getElementById('rotateBtn');
+    const cropStartBtn = document.getElementById('cropStartBtn');
+    const cropConfirmBtn = document.getElementById('cropConfirmBtn');
+    const cropCancelBtn = document.getElementById('cropCancelBtn');
+    const loading = document.getElementById('loading');
+
+    // 滑块
+    const slider1 = document.getElementById('slider1');
+    const slider1Val = document.getElementById('slider1Value');
+    const slider1Label = document.getElementById('slider1Label');
+    const slider2 = document.getElementById('slider2');
+    const slider2Group = document.getElementById('slider2Group');
+    const slider2Val = document.getElementById('slider2Value');
+    const slider2Label = document.getElementById('slider2Label');
+
+    // --- 全局状态 ---
+    let originalImage = null; 
+    let currentFilter = 'none';
+    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+    let processingTimeout;
+
+    // 选区/裁剪状态
+    let selectionMode = null; 
+    let cropRect = null; 
+    let mosaicRegion = null; 
+    let cropAction = null; 
+    let cropDragStart = null; 
+    let cropRectStart = null; 
+    const MIN_CROP_SIZE = 50;
+
+    // 滑动对比状态
+    let isSliderMode = false;
+    let isDraggingSlider = false;
+
+    // 滤镜配置
+    const filters = [
+        { id: 'none', name: '原图', icon: 'fa-image' },
+        { id: 'oil', name: '油画', icon: 'fa-palette' }, // New
+        { id: 'ink', name: '水墨', icon: 'fa-feather-alt' }, // New
+        { id: 'crayon', name: '蜡笔', icon: 'fa-child' }, // New
+        { id: 'cyberpunk', name: '赛博朋克', icon: 'fa-city' },
+        { id: 'one-last', name: 'EVA 终章', icon: 'fa-pen-nib' },
+        { id: 'eva-lite', name: 'EVA 轮廓', icon: 'fa-signature' },
+        { id: 'solarize', name: '负感', icon: 'fa-sun' },
+        { id: 'emboss', name: '浮雕', icon: 'fa-cube' },
+        { id: 'mosaic', name: '马赛克', icon: 'fa-th' },
+        { id: 'pixel', name: '像素风', icon: 'fa-gamepad' },
+        { id: 'halftone', name: '半调波普', icon: 'fa-dot-circle' },
+        { id: 'edge', name: '边缘素描', icon: 'fa-pencil-alt' },
+        { id: 'glitch', name: '故障风', icon: 'fa-bolt' },
+        { id: 'vignette', name: '胶片暗角', icon: 'fa-circle' },
+        { id: 'oldtv', name: '老电视', icon: 'fa-tv' },
+        { id: 'sepia', name: '怀旧', icon: 'fa-coffee' },
+        { id: 'neon', name: '霓虹', icon: 'fa-palette' },
+        { id: 'contrast', name: '高对比', icon: 'fa-adjust' },
+        { id: 'invert', name: '反色', icon: 'fa-exchange-alt' },
+        { id: 'poster', name: '旧海报', icon: 'fa-scroll' },
+        { id: 'grayscale', name: '黑白', icon: 'fa-moon' },
+    ];
+
+    // --- 初始化 ---
+    filters.forEach(f => {
+        const btn = document.createElement('button');
+        btn.className = `filter-btn border border-gray-700 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg p-3 flex flex-col items-center gap-2 transition-all`;
+        btn.dataset.filter = f.id;
+        
+        let iconClass = f.icon;
+        btn.innerHTML = `<i class="fas ${iconClass} text-xl mb-1"></i><span class="text-xs font-medium">${f.name}</span>`;
+        btn.onclick = () => {
+            if (selectionMode) return;
+            setFilter(f.id);
+        };
+        filterContainer.appendChild(btn);
+    });
+
+    // --- 事件监听 ---
+
+    // 1. 上传
+    uploadUi.addEventListener('click', () => fileInput.click());
+    reselectBtn.addEventListener('click', () => {
+        if(selectionMode) exitSelectionMode(false);
+        fileInput.click();
+    });
+    
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadUi.classList.add('border-blue-500', 'bg-gray-800'); });
+    dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); uploadUi.classList.remove('border-blue-500', 'bg-gray-800'); });
+    dropZone.addEventListener('drop', (e) => { e.preventDefault(); uploadUi.classList.remove('border-blue-500', 'bg-gray-800'); handleFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', (e) => { handleFile(e.target.files[0]); e.target.value = ''; });
+
+    // 2. 调节
+    slider1.addEventListener('input', (e) => { slider1Val.innerText = e.target.value; triggerApply(); });
+    slider2.addEventListener('input', (e) => { slider2Val.innerText = e.target.value; triggerApply(); });
+
+    resetBtn.addEventListener('click', () => {
+        if(selectionMode) return;
+        mosaicRegion = null;
+        updateMosaicUI();
+        setFilter('none');
+        slider1.value = 50; slider2.value = 50;
+        triggerApply();
+    });
+
+    downloadBtn.addEventListener('click', () => {
+        if(selectionMode) return;
+        const link = document.createElement('a');
+        link.download = `retrofx_${currentFilter}_${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+
+    // 3. 旋转
+    rotateBtn.addEventListener('click', () => {
+        if (!originalImage || selectionMode) return;
+        loading.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            const t = document.createElement('canvas');
+            const w = originalImage.width; const h = originalImage.height;
+            t.width = h; t.height = w;
+            const tx = t.getContext('2d');
+            tx.translate(h/2, w/2); tx.rotate(90 * Math.PI / 180); tx.drawImage(originalImage, -w/2, -h/2);
+            mosaicRegion = null;
+            updateOriginalImage(t.toDataURL());
+        });
+    });
+
+    // 4. 裁剪/选区
+    cropStartBtn.addEventListener('click', () => startSelection('crop'));
+    selectMosaicRegionBtn.addEventListener('click', () => startSelection('mask'));
+    clearMosaicRegionBtn.addEventListener('click', () => { mosaicRegion = null; updateMosaicUI(); triggerApply(); });
+    cropCancelBtn.addEventListener('click', () => exitSelectionMode(false));
+    cropConfirmBtn.addEventListener('click', () => exitSelectionMode(true));
+
+    canvas.addEventListener('mousedown', onCropMouseDown);
+    canvas.addEventListener('mousemove', onCropMouseMove);
+    canvas.addEventListener('mouseup', onCropMouseUp);
+    canvas.addEventListener('mouseleave', onCropMouseUp);
+    // Touch mapping for crop
+    const mapTouch = (e, type) => {
+        if (!selectionMode) return;
+        if (type === 'mousedown') e.preventDefault();
+        const t = e.touches[0] || e.changedTouches[0];
+        canvas.dispatchEvent(new MouseEvent(type, { clientX: t.clientX, clientY: t.clientY, bubbles: true }));
+    };
+    canvas.addEventListener('touchstart', (e) => mapTouch(e, 'mousedown'), {passive:false});
+    canvas.addEventListener('touchmove', (e) => mapTouch(e, 'mousemove'), {passive:false});
+    canvas.addEventListener('touchend', (e) => mapTouch(e, 'mouseup'));
+
+    // 5. 对比模式
+    // 长按对比 (Press & Hold)
+    const startCompare = (e) => {
+        if (!originalImage || selectionMode || isSliderMode) return;
+        e.preventDefault();
+        compareBtn.classList.add('compare-active');
+        compareBtn.innerHTML = `<i class="fas fa-eye mr-2"></i>显示原图`;
+        ctx.save(); ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height); ctx.restore();
+    };
+    const endCompare = (e) => {
+        if (!originalImage || selectionMode || isSliderMode) return;
+        e.preventDefault();
+        compareBtn.classList.remove('compare-active');
+        compareBtn.innerHTML = `<i class="fas fa-eye mr-2"></i>按住对比`;
+        applyCurrentFilter();
+    };
+    compareBtn.addEventListener('mousedown', startCompare);
+    compareBtn.addEventListener('touchstart', startCompare);
+    compareBtn.addEventListener('mouseup', endCompare);
+    compareBtn.addEventListener('mouseleave', endCompare);
+    compareBtn.addEventListener('touchend', endCompare);
+
+    // 滑动对比 (Slider)
+    toggleSliderBtn.addEventListener('click', toggleSliderMode);
+
+    // Slider 拖拽逻辑
+    const onSliderMove = (clientX) => {
+        const rect = canvasWrapper.getBoundingClientRect();
+        let x = clientX - rect.left;
+        x = Math.max(0, Math.min(x, rect.width));
+        const percent = (x / rect.width) * 100;
+        
+        compareOverlay.style.width = `${percent}%`;
+        sliderHandle.style.left = `${percent}%`;
+    };
+
+    sliderHandle.addEventListener('mousedown', () => isDraggingSlider = true);
+    window.addEventListener('mouseup', () => isDraggingSlider = false);
+    window.addEventListener('mousemove', (e) => {
+        if (isDraggingSlider && isSliderMode) {
+            e.preventDefault();
+            onSliderMove(e.clientX);
+        }
+    });
+
+    sliderHandle.addEventListener('touchstart', (e) => { isDraggingSlider = true; e.preventDefault(); });
+    window.addEventListener('touchend', () => isDraggingSlider = false);
+    window.addEventListener('touchmove', (e) => {
+        if (isDraggingSlider && isSliderMode) {
+            onSliderMove(e.touches[0].clientX);
+        }
+    });
+
+    // 点击 Wrapper 也可以快速定位 slider
+    canvasWrapper.addEventListener('click', (e) => {
+        if (isSliderMode && !isDraggingSlider && !selectionMode) {
+            onSliderMove(e.clientX);
+        }
+    });
+
+
+    // --- 核心逻辑 ---
+
+    function handleFile(file) {
+        if (!file) return;
+        if (file.size > MAX_FILE_SIZE) { alert('图片大小超过 20MB 限制！'); return; }
+        if (!file.type.startsWith('image/')) { alert('请上传有效的图片文件'); return; }
+        const reader = new FileReader();
+        reader.onload = (e) => updateOriginalImage(e.target.result);
+        reader.readAsDataURL(file);
+    }
+
+    function updateOriginalImage(src) {
+        const img = new Image();
+        img.onload = () => {
+            originalImage = img;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            
+            // 同步 Before Canvas
+            beforeCanvas.width = img.width;
+            beforeCanvas.height = img.height;
+            beforeCtx.drawImage(img, 0, 0);
+
+            // UI 更新
+            uploadUi.classList.add('hidden');
+            canvasWrapper.classList.remove('hidden'); // 显示 Wrapper
+            canvas.classList.remove('hidden'); // 确保 Canvas 显示
+            
+            resetBtn.classList.remove('hidden');
+            downloadBtn.classList.remove('hidden');
+            reselectBtn.classList.remove('hidden');
+            divider.classList.remove('hidden');
+            compareTools.classList.remove('hidden'); // 显示对比工具组
+            adjustmentSection.classList.remove('hidden');
+            controlsContainer.classList.remove('opacity-50', 'pointer-events-none');
+            loading.classList.add('hidden');
+            
+            // 重置 Slider 位置
+            compareOverlay.style.width = '50%';
+            sliderHandle.style.left = '50%';
+            
+            applyCurrentFilter();
+        };
+        img.src = src;
+    }
+
+    function toggleSliderMode() {
+        if (!originalImage || selectionMode) return;
+        isSliderMode = !isSliderMode;
+        
+        if (isSliderMode) {
+            // 开启滑动对比
+            compareOverlay.classList.remove('hidden');
+            sliderHandle.classList.remove('hidden');
+            afterLabel.classList.remove('hidden');
+            compareBtn.classList.add('opacity-50', 'pointer-events-none'); // 禁用长按对比
+            toggleSliderBtn.classList.add('text-blue-400', 'bg-blue-900/50');
+            toggleSliderBtn.innerHTML = `<i class="fas fa-check mr-2"></i>退出滑动`;
+        } else {
+            // 关闭滑动对比
+            compareOverlay.classList.add('hidden');
+            sliderHandle.classList.add('hidden');
+            afterLabel.classList.add('hidden');
+            compareBtn.classList.remove('opacity-50', 'pointer-events-none');
+            toggleSliderBtn.classList.remove('text-blue-400', 'bg-blue-900/50');
+            toggleSliderBtn.innerHTML = `<i class="fas fa-columns mr-2"></i>滑动对比`;
+        }
+    }
+
+    // --- 滤镜与选区逻辑 ---
+
+    function setFilter(filterId) {
+        currentFilter = filterId;
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            if (btn.dataset.filter === filterId) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+
+        slider2Group.classList.add('hidden'); 
+        mosaicToolSection.classList.add('hidden'); 
+
+        switch(filterId) {
+            case 'none':
+            case 'grayscale': slider1.disabled = true; slider1Label.innerText = "无参数"; break;
+            case 'oil':
+                slider1.disabled = false; slider1.min = 2; slider1.max = 20; slider1.value = 4; slider1Label.innerText = "笔触大小";
+                slider2Group.classList.remove('hidden'); slider2.min = 4; slider2.max = 32; slider2.value = 8; slider2Label.innerText = "色块层级"; break;
+            case 'ink':
+                slider1.disabled = false; slider1.min = 0; slider1.max = 200; slider1.value = 100; slider1Label.innerText = "墨韵强度";
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 255; slider2.value = 80; slider2Label.innerText = "纸张纹理"; break;
+            case 'crayon':
+                slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 50; slider1Label.innerText = "粗糙度";
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 100; slider2.value = 50; slider2Label.innerText = "色彩浓度"; break;
+            case 'mosaic':
+                slider1.disabled = false; slider1.min = 1; slider1.max = 100; slider1.value = 20; slider1Label.innerText = "马赛克大小";
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 10; slider2.value = 0; slider2Label.innerText = "模糊度";
+                mosaicToolSection.classList.remove('hidden'); updateMosaicUI(); break;
+            case 'eva-lite': 
+                slider1.disabled = false; slider1.min = 10; slider1.max = 150; slider1.value = 50; slider1Label.innerText = "线条浓度";
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 360; slider2.value = 260; slider2Label.innerText = "线条颜色"; break;
+            case 'one-last': 
+                slider1.disabled = false; slider1.min = 1; slider1.max = 20; slider1.value = 5; slider1Label.innerText = "线条粗细";
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 360; slider2.value = 175; slider2Label.innerText = "主题色 (青/红/紫)"; break;
+            case 'cyberpunk':
+                slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 80; slider1Label.innerText = "强度";
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 2; slider2.value = 0; slider2Label.innerText = "配色 (蓝粉/紫绿/红青)"; break;
+            case 'solarize':
+                slider1.disabled = false; slider1.min = 0; slider1.max = 255; slider1.value = 128; slider1Label.innerText = "反转阈值"; break;
+            case 'emboss':
+                slider1.disabled = false; slider1.min = 0; slider1.max = 5; slider1.value = 1; slider1Label.innerText = "浮雕深度"; 
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 128; slider2.value = 128; slider2Label.innerText = "灰度基底"; break;
+            case 'pixel':
+                slider1.disabled = false; slider1.min = 2; slider1.max = 64; slider1.value = 8; slider1Label.innerText = "像素粒度";
+                slider2Group.classList.remove('hidden'); slider2.min = 2; slider2.max = 32; slider2.value = 8; slider2Label.innerText = "色彩丰富度"; break;
+            case 'halftone': slider1.disabled = false; slider1.min = 3; slider1.max = 30; slider1.value = 8; slider1Label.innerText = "波点大小"; break;
+            case 'edge':
+                slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 20; slider1Label.innerText = "敏感度阈值";
+                slider2Group.classList.remove('hidden'); slider2.min = 0; slider2.max = 1; slider2.value = 1; slider2Label.innerText = "反转线条 (0/1)"; break;
+            case 'glitch': slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 30; slider1Label.innerText = "故障强度"; break;
+            case 'vignette': slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 60; slider1Label.innerText = "暗角范围"; break;
+            case 'oldtv': slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 40; slider1Label.innerText = "干扰强度"; break;
+            case 'sepia': slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 80; slider1Label.innerText = "怀旧程度"; break;
+            case 'neon': slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 50; slider1Label.innerText = "色相旋转"; break;
+            case 'contrast': slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 50; slider1Label.innerText = "对比强度"; break;
+            case 'invert': slider1.disabled = false; slider1.min = 0; slider1.max = 100; slider1.value = 100; slider1Label.innerText = "反转程度"; break;
+            case 'poster': slider1.disabled = false; slider1.min = 0; slider1.max = 255; slider1.value = 120; slider1Label.innerText = "色调阈值"; break;
+        }
+        slider1Val.innerText = slider1.value; slider2Val.innerText = slider2.value;
+        triggerApply();
+    }
+
+    function triggerApply() {
+        if (!originalImage || selectionMode) return; 
+        clearTimeout(processingTimeout);
+        loading.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            processingTimeout = setTimeout(() => { applyCurrentFilter(); loading.classList.add('hidden'); }, 50);
+        });
+    }
+
+    function applyCurrentFilter() {
+        if (canvas.width !== originalImage.width || canvas.height !== originalImage.height) {
+            canvas.width = originalImage.width; canvas.height = originalImage.height;
+        }
+        ctx.filter = 'none'; ctx.globalCompositeOperation = 'source-over';
+        const w = canvas.width; const h = canvas.height;
+        const s1 = parseInt(slider1.value); const s2 = parseInt(slider2.value);
+
+        if (!['pixel', 'mosaic', 'halftone', 'one-last', 'oil', 'crayon'].includes(currentFilter) || (currentFilter === 'mosaic' && mosaicRegion)) {
+            ctx.drawImage(originalImage, 0, 0);
+        }
+
+        let imageData;
+        switch(currentFilter) {
+            case 'oil': {
+                // 油画效果 (Fast implementation via Quantization & Median-like effect)
+                // 1. Downscale to improve performance and create "blocky" feel
+                const scale = Math.max(0.1, 1 - (s1 / 25)); // 笔触越大，缩小越多
+                const sw = Math.ceil(w * scale);
+                const sh = Math.ceil(h * scale);
+                
+                const offCanvas = document.createElement('canvas'); offCanvas.width = sw; offCanvas.height = sh;
+                const offCtx = offCanvas.getContext('2d');
+                offCtx.drawImage(originalImage, 0, 0, sw, sh);
+                
+                // 2. Quantize colors
+                const pData = offCtx.getImageData(0, 0, sw, sh);
+                const data = pData.data;
+                const levels = Math.max(2, s2);
+                const factor = 255 / (levels - 1);
+
+                for (let i = 0; i < data.length; i += 4) {
+                    data[i] = Math.round(data[i] / factor) * factor; 
+                    data[i+1] = Math.round(data[i+1] / factor) * factor; 
+                    data[i+2] = Math.round(data[i+2] / factor) * factor; 
+                }
+                offCtx.putImageData(pData, 0, 0);
+                
+                // 3. Upscale with slight blur to smooth blocks
+                ctx.imageSmoothingEnabled = true;
+                ctx.clearRect(0,0, w, h);
+                // Draw back stretched
+                ctx.drawImage(offCanvas, 0, 0, sw, sh, 0, 0, w, h);
+                break;
+            }
+            case 'ink': {
+                // 水墨效果: Grayscale -> Blur -> Contrast -> Noise
+                // 1. Draw original grayscale
+                const offCanvas = document.createElement('canvas'); offCanvas.width = w; offCanvas.height = h;
+                const offCtx = offCanvas.getContext('2d');
+                offCtx.filter = 'grayscale(100%) contrast(1.2)'; // 增加基础对比度
+                offCtx.drawImage(originalImage, 0, 0);
+                
+                // 2. Apply blur based on s1 (ink diffusion)
+                const blurAmount = s1 / 20; 
+                offCtx.filter = `blur(${blurAmount}px)`;
+                offCtx.drawImage(offCanvas, 0, 0); // Self-draw to blur
+                
+                // 3. Paper Texture (Noise)
+                const noiseData = offCtx.getImageData(0, 0, w, h);
+                const d = noiseData.data;
+                const noiseIntensity = s2;
+                
+                for(let i=0; i<d.length; i+=4) {
+                    const r = d[i];
+                    // Thresholding for ink wash look
+                    let val = r;
+                    if (val < 100) val *= 0.8; // Darker darks
+                    else if (val > 200) val = 255; // Cleaner whites
+                    
+                    // Add noise
+                    const n = (Math.random() - 0.5) * noiseIntensity;
+                    val += n;
+                    
+                    d[i] = d[i+1] = d[i+2] = Math.min(255, Math.max(0, val));
+                }
+                
+                offCtx.putImageData(noiseData, 0, 0);
+                
+                // 4. Final draw
+                ctx.drawImage(offCanvas, 0, 0);
+                break;
+            }
+            case 'crayon': {
+                // 蜡笔效果: Texture Overlay + Saturation + Rough Edges
+                // 1. Draw original with high saturation & contrast
+                const sat = 100 + s2 * 2; // 100% - 300%
+                const cont = 100 + s1 / 2;
+                
+                const offCanvas = document.createElement('canvas'); offCanvas.width = w; offCanvas.height = h;
+                const offCtx = offCanvas.getContext('2d');
+                offCtx.filter = `saturate(${sat}%) contrast(${cont}%)`;
+                offCtx.drawImage(originalImage, 0, 0);
+                
+                // 2. Generate heavy noise texture
+                const iData = offCtx.getImageData(0, 0, w, h);
+                const d = iData.data;
+                const rough = s1 * 1.5;
+                
+                for(let i=0; i<d.length; i+=4) {
+                    // Crayon noise is subtractive and additive
+                    const n = (Math.random() - 0.5) * rough;
+                    
+                    // Paper texture check (simulate skips on rough paper)
+                    // Simple logic: random skips
+                    if (Math.random() > 0.8) {
+                        // Paper peek through (whiteish)
+                        d[i] = d[i] * 0.8 + 255 * 0.2 + n;
+                        d[i+1] = d[i+1] * 0.8 + 255 * 0.2 + n;
+                        d[i+2] = d[i+2] * 0.8 + 255 * 0.2 + n;
+                    } else {
+                        d[i] += n;
+                        d[i+1] += n;
+                        d[i+2] += n;
+                    }
+                }
+                offCtx.putImageData(iData, 0, 0);
+                ctx.drawImage(offCanvas, 0, 0);
+                break;
+            }
+            case 'cyberpunk': {
+                imageData = ctx.getImageData(0, 0, w, h);
+                const d = imageData.data;
+                const strength = s1 / 100;
+                const mode = Math.floor(s2); // 0, 1, 2
+                
+                // 预定义配色方案 (Dark Color, Light Color)
+                const palettes = [
+                    { d: [0, 20, 100], l: [255, 0, 128] }, // 0: Deep Blue + Hot Pink
+                    { d: [45, 0, 45],  l: [0, 255, 128] }, // 1: Deep Purple + Neon Green
+                    { d: [50, 0, 0],   l: [0, 255, 255] }  // 2: Dark Red + Cyan
+                ];
+                const p = palettes[Math.min(mode, palettes.length - 1)];
+
+                for(let i=0; i<d.length; i+=4) {
+                    const r = d[i], g = d[i+1], b = d[i+2];
+                    const lum = 0.299*r + 0.587*g + 0.114*b; // 灰度
+                    const ratio = lum / 255;
+                    
+                    // 映射颜色
+                    const nr = p.d[0] * (1-ratio) + p.l[0] * ratio;
+                    const ng = p.d[1] * (1-ratio) + p.l[1] * ratio;
+                    const nb = p.d[2] * (1-ratio) + p.l[2] * ratio;
+                    
+                    // 混合原图
+                    d[i] = r * (1-strength) + nr * strength;
+                    d[i+1] = g * (1-strength) + ng * strength;
+                    d[i+2] = b * (1-strength) + nb * strength;
+                }
+                ctx.putImageData(imageData, 0, 0);
+                break;
+            }
+            case 'solarize': {
+                imageData = ctx.getImageData(0, 0, w, h);
+                const d = imageData.data;
+                const thresh = s1;
+                for(let i=0; i<d.length; i+=4) {
+                    if (d[i] > thresh) d[i] = 255 - d[i];
+                    if (d[i+1] > thresh) d[i+1] = 255 - d[i+1];
+                    if (d[i+2] > thresh) d[i+2] = 255 - d[i+2];
+                }
+                ctx.putImageData(imageData, 0, 0);
+                break;
+            }
+            case 'emboss': {
+                // 简单的浮雕算法：当前像素 - 左上角像素 + 灰色基底
+                imageData = ctx.getImageData(0, 0, w, h);
+                const src = imageData.data;
+                const output = ctx.createImageData(w, h);
+                const dst = output.data;
+                const depth = s1; 
+                const bias = s2;
+                
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        const i = (y * w + x) * 4;
+                        // 边界检查
+                        if (y === 0 || x === 0) {
+                            dst[i] = dst[i+1] = dst[i+2] = bias;
+                            dst[i+3] = 255;
+                            continue;
+                        }
+                        const prevI = ((y - 1) * w + (x - 1)) * 4;
+                        
+                        const diffR = src[i] - src[prevI];
+                        const diffG = src[i+1] - src[prevI+1];
+                        const diffB = src[i+2] - src[prevI+2];
+                        
+                        // 取最大差异作为浮雕值，或者平均值
+                        const diff = Math.max(diffR, diffG, diffB); 
+                        
+                        const val = bias + diff * depth;
+                        dst[i] = dst[i+1] = dst[i+2] = val;
+                        dst[i+3] = 255;
+                    }
+                }
+                ctx.putImageData(output, 0, 0);
+                break;
+            }
+            case 'one-last': {
+                const grayC = document.createElement('canvas'); grayC.width = w; grayC.height = h;
+                const grayCtx = grayC.getContext('2d');
+                grayCtx.filter = 'grayscale(100%)';
+                grayCtx.drawImage(originalImage, 0, 0);
+                
+                const blurC = document.createElement('canvas'); blurC.width = w; blurC.height = h;
+                const blurCtx = blurC.getContext('2d');
+                blurCtx.filter = `invert(100%) blur(${s1}px)`; 
+                blurCtx.drawImage(grayC, 0, 0);
+                
+                ctx.drawImage(grayC, 0, 0); 
+                ctx.globalCompositeOperation = 'color-dodge';
+                ctx.drawImage(blurC, 0, 0); 
+                ctx.globalCompositeOperation = 'source-over';
+                
+                const sketchData = ctx.getImageData(0, 0, w, h);
+                const d = sketchData.data;
+                
+                const hslToRgb = (h, s, l) => {
+                    let r, g, b;
+                    if (s === 0) { r = g = b = l; } 
+                    else {
+                        const hue2rgb = (p, q, t) => {
+                            if (t < 0) t += 1; if (t > 1) t -= 1;
+                            if (t < 1/6) return p + (q - p) * 6 * t;
+                            if (t < 1/2) return q;
+                            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                            return p;
+                        };
+                        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                        const p = 2 * l - q;
+                        r = hue2rgb(p, q, h + 1/3);
+                        g = hue2rgb(p, q, h);
+                        b = hue2rgb(p, q, h - 1/3);
+                    }
+                    return [r * 255, g * 255, b * 255];
+                };
+                
+                const [tr, tg, tb] = hslToRgb(s2 / 360, 1.0, 0.35); 
+
+                for (let i = 0; i < d.length; i += 4) {
+                    const L = d[i]; 
+                    const ratio = L / 255;
+                    d[i]     = tr + (255 - tr) * ratio;
+                    d[i + 1] = tg + (255 - tg) * ratio;
+                    d[i + 2] = tb + (255 - tb) * ratio;
+                }
+                
+                ctx.putImageData(sketchData, 0, 0);
+                break;
+            }
+
+            case 'eva-lite': { 
+                imageData = ctx.getImageData(0, 0, w, h);
+                const data = imageData.data;
+                const threshold = s1; const hue = s2;
+                const hslToRgb = (h, s, l) => {
+                    let r, g, b;
+                    if (s === 0) { r = g = b = l; } 
+                    else {
+                        const hue2rgb = (p, q, t) => {
+                            if (t < 0) t += 1; if (t > 1) t -= 1;
+                            if (t < 1/6) return p + (q - p) * 6 * t;
+                            if (t < 1/2) return q;
+                            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                            return p;
+                        };
+                        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                        const p = 2 * l - q;
+                        r = hue2rgb(p, q, h + 1/3); g = hue2rgb(p, q, h); b = hue2rgb(p, q, h - 1/3);
+                    }
+                    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+                };
+                const [lr, lg, lb] = hslToRgb(hue / 360, 0.8, 0.4);
+                const outputData = ctx.createImageData(w, h); const out = outputData.data;
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        const idx = (y * w + x) * 4;
+                        const gray = 0.299 * data[idx] + 0.587 * data[idx+1] + 0.114 * data[idx+2];
+                        let edge = 0;
+                        if (x < w - 1 && y < h - 1) {
+                            const idx2 = ((y + 1) * w + (x + 1)) * 4;
+                            const gray2 = 0.299 * data[idx2] + 0.587 * data[idx2+1] + 0.114 * data[idx2+2];
+                            edge = Math.abs(gray - gray2);
+                        }
+                        let ink = (edge * 3) + ((255 - gray) * (threshold / 100));
+                        if (ink < 30) ink = 0; if (ink > 255) ink = 255;
+                        const alpha = ink / 255;
+                        out[idx] = (1 - alpha) * 255 + alpha * lr; out[idx+1] = (1 - alpha) * 255 + alpha * lg; out[idx+2] = (1 - alpha) * 255 + alpha * lb; out[idx+3] = 255;
+                    }
+                }
+                ctx.putImageData(outputData, 0, 0); break;
+            }
+
+            case 'mosaic': {
+                const size = Math.max(1, s1);
+                const sw = Math.ceil(w / size); const sh = Math.ceil(h / size);
+                const offCanvas = document.createElement('canvas'); offCanvas.width = sw; offCanvas.height = sh;
+                const offCtx = offCanvas.getContext('2d'); offCtx.imageSmoothingEnabled = false; offCtx.drawImage(originalImage, 0, 0, sw, sh);
+                ctx.imageSmoothingEnabled = s2 > 0; 
+                if (mosaicRegion) {
+                    ctx.save(); ctx.beginPath(); ctx.rect(mosaicRegion.x, mosaicRegion.y, mosaicRegion.w, mosaicRegion.h); ctx.clip();
+                    if (s2 > 0) ctx.filter = `blur(${s2}px)`;
+                    ctx.drawImage(offCanvas, 0, 0, sw, sh, 0, 0, w, h); ctx.restore();
+                } else {
+                    ctx.clearRect(0,0, w, h); if (s2 > 0) ctx.filter = `blur(${s2}px)`;
+                    ctx.drawImage(offCanvas, 0, 0, sw, sh, 0, 0, w, h);
+                }
+                ctx.filter = 'none'; break;
+            }
+            case 'pixel': {
+                const pSize = Math.max(1, s1); const colors = Math.max(2, s2); 
+                const pw = Math.ceil(w / pSize); const ph = Math.ceil(h / pSize);
+                const pCanvas = document.createElement('canvas'); pCanvas.width = pw; pCanvas.height = ph;
+                const pCtx = pCanvas.getContext('2d'); pCtx.drawImage(originalImage, 0, 0, pw, ph);
+                const pData = pCtx.getImageData(0, 0, pw, ph); const data = pData.data; const factor = 255 / (colors - 1);
+                for (let i = 0; i < data.length; i += 4) {
+                    data[i] = Math.round(data[i] / factor) * factor; data[i+1] = Math.round(data[i+1] / factor) * factor; data[i+2] = Math.round(data[i+2] / factor) * factor; 
+                }
+                pCtx.putImageData(pData, 0, 0); ctx.imageSmoothingEnabled = false;
+                ctx.clearRect(0, 0, w, h); ctx.drawImage(pCanvas, 0, 0, pw, ph, 0, 0, w, h); break;
+            }
+            case 'halftone': {
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = '#000000'; 
+                const dotSize = Math.max(3, s1); const hCanvas = document.createElement('canvas'); hCanvas.width = w; hCanvas.height = h;
+                const hCtx = hCanvas.getContext('2d'); hCtx.drawImage(originalImage, 0, 0); const hData = hCtx.getImageData(0, 0, w, h).data;
+                for (let y = 0; y < h; y += dotSize) {
+                    for (let x = 0; x < w; x += dotSize) {
+                        const i = (y * w + x) * 4; const avg = (hData[i] + hData[i+1] + hData[i+2]) / 3; const radius = (1 - avg / 255) * (dotSize / 2) * 1.2;
+                        if (radius > 0.5) { ctx.beginPath(); ctx.arc(x + dotSize/2, y + dotSize/2, radius, 0, Math.PI * 2); ctx.fill(); }
+                    }
+                } break;
+            }
+            case 'edge': {
+                imageData = ctx.getImageData(0, 0, w, h); const src = imageData.data; const outData = ctx.createImageData(w, h); const dst = outData.data;
+                const threshold = s1; const invert = s2 === 1; const bg = invert ? 255 : 0; const fg = invert ? 0 : 255;
+                for(let i=0; i<dst.length; i+=4) dst[i] = dst[i+1] = dst[i+2] = bg; for(let i=0; i<dst.length; i++) if((i+1)%4===0) dst[i] = 255; 
+                for (let y = 0; y < h - 1; y++) {
+                    for (let x = 0; x < w - 1; x++) {
+                        const i = (y * w + x) * 4; const right = i + 4; const down = i + w * 4;
+                        const l = 0.299*src[i] + 0.587*src[i+1] + 0.114*src[i+2]; const lr = 0.299*src[right] + 0.587*src[right+1] + 0.114*src[right+2]; const ld = 0.299*src[down] + 0.587*src[down+1] + 0.114*src[down+2];
+                        if (Math.abs(l - lr) + Math.abs(l - ld) > threshold) { dst[i] = dst[i+1] = dst[i+2] = fg; } else { dst[i] = dst[i+1] = dst[i+2] = bg; }
+                    }
+                } ctx.putImageData(outData, 0, 0); break;
+            }
+            case 'glitch': {
+                const slices = 20; const maxOffset = w * (s1 / 100) * 0.1; 
+                for (let i = 0; i < slices; i++) {
+                    const sliceH = Math.floor(Math.random() * (h / 4)); const sliceY = Math.floor(Math.random() * h); const offset = (Math.random() - 0.5) * maxOffset;
+                    ctx.drawImage(canvas, 0, sliceY, w, sliceH, offset, sliceY, w, sliceH);
+                }
+                if (s1 > 10) { ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = `rgba(255, 0, 0, 0.2)`; ctx.fillRect(Math.random()*10, 0, w, h); ctx.fillStyle = `rgba(0, 0, 255, 0.2)`; ctx.fillRect(-Math.random()*10, 0, w, h); ctx.globalCompositeOperation = 'source-over'; } break;
+            }
+            case 'vignette': {
+                const innerRadius = Math.max(0, (100 - s1) / 100) * (Math.min(w, h) / 2); const outerRadius = Math.max(w, h) * 0.8;
+                const gradient = ctx.createRadialGradient(w/2, h/2, innerRadius, w/2, h/2, outerRadius);
+                gradient.addColorStop(0, 'rgba(0,0,0,0)'); gradient.addColorStop(1, 'rgba(0,0,0,0.95)'); 
+                ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h); break;
+            }
+            case 'sepia': ctx.filter = `sepia(${s1}%)`; ctx.drawImage(originalImage, 0, 0); ctx.filter = 'none'; break;
+            case 'neon': const deg = Math.floor((s1 / 100) * 360); ctx.filter = `hue-rotate(${deg}deg) saturate(200%)`; ctx.drawImage(originalImage, 0, 0); ctx.filter = 'none'; break;
+            case 'contrast': const contrast = 100 + (s1 * 2); ctx.filter = `contrast(${contrast}%)`; ctx.drawImage(originalImage, 0, 0); ctx.filter = 'none'; break;
+            case 'invert': ctx.filter = `invert(${s1}%)`; ctx.drawImage(originalImage, 0, 0); ctx.filter = 'none'; break;
+            case 'poster': {
+                imageData = ctx.getImageData(0, 0, w, h); const pd = imageData.data; const threshold = s1;
+                for (let i = 0; i < pd.length; i += 4) {
+                    const brightness = 0.34 * pd[i] + 0.5 * pd[i+1] + 0.16 * pd[i+2];
+                    if (brightness > threshold) { pd[i] = 255; pd[i+1] = 240; pd[i+2] = 200; } else { pd[i] = 40; pd[i+1] = 60; pd[i+2] = 100; }
+                } ctx.putImageData(imageData, 0, 0); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgba(200, 180, 140, 0.3)'; ctx.fillRect(0, 0, w, h); break;
+            }
+            case 'oldtv': {
+                imageData = ctx.getImageData(0, 0, w, h); const d = imageData.data; const noise = s1 * 2; 
+                for (let i = 0; i < d.length; i += 4) {
+                    if (i + 4 * 5 < d.length) { d[i] = d[i + 20]; }
+                    const y = Math.floor((i / 4) / w);
+                    if (y % 4 === 0) { d[i] *= 0.7; d[i+1] *= 0.7; d[i+2] *= 0.7; }
+                    const rand = (Math.random() - 0.5) * noise; d[i] += rand; d[i+1] += rand; d[i+2] += rand;
+                } ctx.putImageData(imageData, 0, 0); ctx.fillStyle = 'rgba(0, 255, 0, 0.05)'; ctx.fillRect(0, 0, w, h); break;
+            }
+            case 'grayscale': ctx.filter = 'grayscale(100%)'; ctx.drawImage(originalImage, 0, 0); ctx.filter = 'none'; break;
+        }
+    }
+
+    // --- 选区/裁剪 核心逻辑 ---
+    function startSelection(mode) {
+        if (!originalImage || isSliderMode) return; // Slider模式下禁止选区
+        selectionMode = mode; 
+        const w = canvas.width; const h = canvas.height; const cw = w * 0.6; const ch = h * 0.6;
+        if (mode === 'mask' && mosaicRegion) { cropRect = { ...mosaicRegion }; } else { cropRect = { x: (w - cw) / 2, y: (h - ch) / 2, w: cw, h: ch }; }
+        
+        adjustmentSection.classList.add('hidden'); filterSection.classList.add('opacity-50', 'pointer-events-none'); controlsContainer.classList.add('opacity-50', 'pointer-events-none'); mosaicToolSection.classList.add('hidden'); compareTools.classList.add('hidden');
+        cropControlSection.classList.remove('hidden'); cropHint.classList.remove('hidden');
+        selectionModeLabel.innerText = mode === 'crop' ? '正在裁剪模式' : '选择打码区域';
+        drawSelectionInterface();
+    }
+
+    function exitSelectionMode(save) {
+        if (save && cropRect) {
+            if (selectionMode === 'crop') {
+                const t = document.createElement('canvas'); t.width = cropRect.w; t.height = cropRect.h;
+                t.getContext('2d').drawImage(originalImage, cropRect.x, cropRect.y, cropRect.w, cropRect.h, 0, 0, cropRect.w, cropRect.h);
+                mosaicRegion = null; updateOriginalImage(t.toDataURL());
+            } else if (selectionMode === 'mask') { mosaicRegion = { ...cropRect }; }
+        }
+        selectionMode = null; cropRect = null; cropAction = null; canvas.style.cursor = 'default';
+        adjustmentSection.classList.remove('hidden'); filterSection.classList.remove('opacity-50', 'pointer-events-none'); controlsContainer.classList.remove('opacity-50', 'pointer-events-none');
+        cropControlSection.classList.add('hidden'); cropHint.classList.add('hidden'); compareTools.classList.remove('hidden');
+        canvas.classList.remove('cursor-nwse', 'cursor-nesw', 'cursor-ns', 'cursor-ew', 'cursor-move');
+        if (currentFilter === 'mosaic') { mosaicToolSection.classList.remove('hidden'); updateMosaicUI(); }
+        if (!save && selectionMode === 'crop') applyCurrentFilter(); else if (selectionMode === 'mask') applyCurrentFilter();
+    }
+    
+    function updateMosaicUI() {
+        if (mosaicRegion) { selectMosaicRegionBtn.innerHTML = `<i class="fas fa-edit"></i> 调整区域`; selectMosaicRegionBtn.classList.replace('flex-1', 'w-2/3'); clearMosaicRegionBtn.classList.remove('hidden'); regionStatus.classList.remove('hidden'); }
+        else { selectMosaicRegionBtn.innerHTML = `<i class="fas fa-vector-square"></i> 选择打码区域`; selectMosaicRegionBtn.classList.replace('w-2/3', 'flex-1'); clearMosaicRegionBtn.classList.add('hidden'); regionStatus.classList.add('hidden'); }
+    }
+
+    function getCanvasCoordinates(e) {
+        const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) * (canvas.width / r.width), y: (e.clientY - r.top) * (canvas.height / r.height) };
+    }
+    function getHitType(x, y) {
+        if (!cropRect) return null;
+        const { x: rx, y: ry, w: rw, h: rh } = cropRect; const t = Math.max(10, Math.min(rw, rh) / 10); 
+        if (Math.abs(x - rx) < t && Math.abs(y - ry) < t) return 'nw';
+        if (Math.abs(x - (rx + rw)) < t && Math.abs(y - ry) < t) return 'ne';
+        if (Math.abs(x - (rx + rw)) < t && Math.abs(y - (ry + rh)) < t) return 'se';
+        if (Math.abs(x - rx) < t && Math.abs(y - (ry + rh)) < t) return 'sw';
+        if (Math.abs(y - ry) < t && x > rx + t && x < rx + rw - t) return 'n';
+        if (Math.abs(y - (ry + rh)) < t && x > rx + t && x < rx + rw - t) return 's';
+        if (Math.abs(x - rx) < t && y > ry + t && y < ry + rh - t) return 'w';
+        if (Math.abs(x - (rx + rw)) < t && y > ry + t && y < ry + rh - t) return 'e';
+        if (x > rx && x < rx + rw && y > ry && y < ry + rh) return 'move';
+        return null;
+    }
+    function updateCursor(hit) {
+        canvas.classList.remove('cursor-nwse', 'cursor-nesw', 'cursor-ns', 'cursor-ew', 'cursor-move', 'cursor-default');
+        if(hit === 'nw' || hit === 'se') canvas.classList.add('cursor-nwse'); else if(hit === 'ne' || hit === 'sw') canvas.classList.add('cursor-nesw'); else if(hit === 'n' || hit === 's') canvas.classList.add('cursor-ns'); else if(hit === 'e' || hit === 'w') canvas.classList.add('cursor-ew'); else if(hit === 'move') canvas.classList.add('cursor-move'); else canvas.classList.add('cursor-default');
+    }
+    function onCropMouseDown(e) {
+        if (!selectionMode) return;
+        const pos = getCanvasCoordinates(e); const hit = getHitType(pos.x, pos.y);
+        if (hit) { cropAction = hit; cropDragStart = pos; cropRectStart = { ...cropRect }; }
+    }
+    function onCropMouseMove(e) {
+        if (!selectionMode) return;
+        const pos = getCanvasCoordinates(e);
+        if (!cropAction) { updateCursor(getHitType(pos.x, pos.y)); return; }
+        const dx = pos.x - cropDragStart.x; const dy = pos.y - cropDragStart.y; const nr = { ...cropRectStart };
+        if (cropAction === 'move') { nr.x += dx; nr.y += dy; if (nr.x < 0) nr.x = 0; if (nr.y < 0) nr.y = 0; if (nr.x + nr.w > canvas.width) nr.x = canvas.width - nr.w; if (nr.y + nr.h > canvas.height) nr.y = canvas.height - nr.h; }
+        else {
+            if (cropAction.includes('n')) { nr.y += dy; nr.h -= dy; } if (cropAction.includes('s')) { nr.h += dy; } if (cropAction.includes('w')) { nr.x += dx; nr.w -= dx; } if (cropAction.includes('e')) { nr.w += dx; }
+            if (nr.w < MIN_CROP_SIZE) { if (cropAction.includes('w')) nr.x = cropRectStart.x + cropRectStart.w - MIN_CROP_SIZE; nr.w = MIN_CROP_SIZE; }
+            if (nr.h < MIN_CROP_SIZE) { if (cropAction.includes('n')) nr.y = cropRectStart.y + cropRectStart.h - MIN_CROP_SIZE; nr.h = MIN_CROP_SIZE; }
+        }
+        cropRect = nr; drawSelectionInterface();
+    }
+    function onCropMouseUp() { if (selectionMode) cropAction = null; }
+    function drawSelectionInterface() {
+        if (!originalImage || !cropRect) return;
+        ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none'; ctx.drawImage(originalImage, 0, 0);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(originalImage, cropRect.x, cropRect.y, cropRect.w, cropRect.h, cropRect.x, cropRect.y, cropRect.w, cropRect.h);
+        const { x, y, w, h } = cropRect;
+        ctx.beginPath(); ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)'; ctx.lineWidth = 1;
+        ctx.moveTo(x + w / 3, y); ctx.lineTo(x + w / 3, y + h); ctx.moveTo(x + 2 * w / 3, y); ctx.lineTo(x + 2 * w / 3, y + h);
+        ctx.moveTo(x, y + h / 3); ctx.lineTo(x + w, y + h / 3); ctx.moveTo(x, y + 2 * h / 3); ctx.lineTo(x + w, y + 2 * h / 3); ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
+        ctx.fillStyle = '#fff'; const dh = (hx, hy) => { ctx.beginPath(); ctx.rect(hx - 5, hy - 5, 10, 10); ctx.fill(); };
+        dh(x, y); dh(x + w, y); dh(x + w, y + h); dh(x, y + h); dh(x + w / 2, y); dh(x + w / 2, y + h); dh(x, y + h / 2); dh(x + w, y + h / 2);
+    }
+</script>
+</body>
+</html>
